@@ -1,64 +1,24 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack, router, useLocalSearchParams } from "expo-router";
-import { useContext } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import ErrorMessage from "../../components/ErrorMessage";
+import Loading from "../../components/Loading";
+import { getMountainById, getWeather } from "../../services/mountainService";
+import type { MountainLog, WeatherData } from "../../types/mountain";
 import { ThemeContext } from "../_layout";
-
-const MOUNTAIN_DATA = [
-  {
-    id: "1",
-    name: "Gunung Arjuno",
-    location: "Malang / Pasuruan",
-    elevation: 3339,
-    status: "Buka",
-    description:
-      "Memiliki jalur ikonik via Purwosari dan Sumberawan. Terkenal dengan situs sejarah dan pemandangan kawah Welirang.",
-    difficulty: "Sedang - Sulit",
-    estimatedTime: "2 Hari 1 Malam",
-    price: 35000,
-  },
-  {
-    id: "2",
-    name: "Gunung Semeru",
-    location: "Lumajang / Malang",
-    elevation: 3676,
-    status: "Waspada",
-    description:
-      "Atap pulau Jawa dengan puncak Mahameru. Aktivitas vulkanik saat ini dipantau secara berkala oleh PVMBG.",
-    difficulty: "Sulit",
-    estimatedTime: "3 Hari 2 Malam",
-    price: 50000,
-  },
-  {
-    id: "3",
-    name: "Gunung Welirang",
-    location: "Mojokerto / Pasuruan",
-    elevation: 3156,
-    status: "Buka",
-    description:
-      "Terkenal dengan penambangan belerang tradisional dan lanskap kawah berbelok yang memanjakan mata.",
-    difficulty: "Sedang",
-    estimatedTime: "2 Hari 1 Malam",
-    price: 35000,
-  },
-  {
-    id: "4",
-    name: "Gunung Bromo",
-    location: "Probolinggo / Pasuruan",
-    elevation: 2329,
-    status: "Buka",
-    description:
-      "Kawasan lautan pasir dan kaldera yang indah. Akses pendakian dan wisata relatif ramah untuk pemula.",
-    difficulty: "Mudah",
-    estimatedTime: "1 Hari",
-    price: 40000,
-  },
-];
 
 export default function DetailScreen() {
   const { darkMode } = useContext(ThemeContext);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const mountain = MOUNTAIN_DATA.find((item) => item.id === id);
+
+  const [mountain, setMountain] = useState<MountainLog | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
 
   const theme = {
     bg: darkMode ? "#0f172a" : "#f8fafc",
@@ -68,10 +28,52 @@ export default function DetailScreen() {
     border: darkMode ? "#334155" : "#cbd5e1",
   };
 
-  if (!mountain) {
+  // Cuaca puncak dari API eksternal (Open-Meteo) pakai .then() / .catch()
+  const loadWeather = useCallback((m: MountainLog) => {
+    if (m.latitude === undefined || m.longitude === undefined) return;
+
+    setWeatherLoading(true);
+    setWeatherError(null);
+    getWeather(m.latitude, m.longitude, m.elevation)
+      .then((data) => setWeather(data))
+      .catch((err) => setWeatherError(String(err)))
+      .finally(() => setWeatherLoading(false));
+  }, []);
+
+  // Ambil detail gunung (async/await + try/catch/finally)
+  const loadMountain = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await getMountainById(id);
+      setMountain(response.data);
+      loadWeather(response.data);
+    } catch (err) {
+      setError(String(err)); // pesan dari reject()
+    } finally {
+      setLoading(false);
+    }
+  }, [id, loadWeather]);
+
+  useEffect(() => {
+    loadMountain();
+  }, [loadMountain]);
+
+  if (loading) {
     return (
       <View style={[styles.centerContainer, { backgroundColor: theme.bg }]}>
-        <Text style={styles.errorText}>Data gunung tidak ditemukan.</Text>
+        <Loading message="Mengambil detail gunung..." />
+      </View>
+    );
+  }
+
+  if (error || !mountain) {
+    return (
+      <View style={[styles.centerContainer, { backgroundColor: theme.bg }]}>
+        <ErrorMessage
+          message={error ?? "Data gunung tidak ditemukan."}
+          onRetry={loadMountain}
+        />
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backBtnText}>Kembali</Text>
         </Pressable>
@@ -108,6 +110,31 @@ export default function DetailScreen() {
           <Text style={[styles.infoValue, { color: theme.textPrimary }]}>{mountain.difficulty}</Text>
         </View>
       </View>
+
+      {mountain.latitude !== undefined && (
+        <View style={[styles.descCard, { backgroundColor: theme.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+            Cuaca Puncak (saat ini)
+          </Text>
+          {weatherLoading ? (
+            <Loading message="Mengambil data cuaca..." />
+          ) : weatherError ? (
+            <ErrorMessage
+              message={weatherError}
+              onRetry={() => loadWeather(mountain)}
+            />
+          ) : weather ? (
+            <View>
+              <Text style={[styles.descText, { color: theme.textPrimary }]}>
+                {weather.condition} · {weather.temperature}°C
+              </Text>
+              <Text style={[styles.descText, { color: theme.textSecondary }]}>
+                Angin: {weather.windSpeed} km/jam
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      )}
 
       <View style={[styles.descCard, { backgroundColor: theme.cardBg }]}>
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Deskripsi Jalur</Text>

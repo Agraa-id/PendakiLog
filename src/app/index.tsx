@@ -3,20 +3,17 @@ import { router } from "expo-router";
 import { useContext, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import { styles } from "../constants/styles";
-import { ThemeContext } from "./_layout"; // Import Context
+import { ThemeContext } from "./_layout";
 
 export default function LoginScreen() {
-  // Ambil state darkMode dari ThemeContext
   const { darkMode } = useContext(ThemeContext);
 
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
   const [username, setUsername] = useState<string>("");
   const [password, setPassword] = useState<string>("");
 
-  // Palette warna dinamis berdasarkan Dark Mode
   const theme = {
     bg: darkMode ? "#0f172a" : "#f8fafc",
-    cardBg: darkMode ? "#1e293b" : "#ffffff",
     textPrimary: darkMode ? "#f8fafc" : "#0f172a",
     textSecondary: darkMode ? "#94a3b8" : "#64748b",
     border: darkMode ? "#334155" : "#cbd5e1",
@@ -49,14 +46,18 @@ export default function LoginScreen() {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={{ alignItems: "center", marginBottom: 28 }}>
         <MaterialCommunityIcons name="terrain" size={72} color="#16a34a" />
-        <Text style={[styles.title, { color: theme.textPrimary }]}>PendakiLog</Text>
+        <Text style={[styles.title, { color: theme.textPrimary }]}>
+          PendakiLog
+        </Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           Catatan & Info Jalur Pendakian Gunung
         </Text>
       </View>
 
       <View style={styles.inputContainer}>
-        <Text style={[styles.label, { color: theme.textPrimary }]}>Username / Email</Text>
+        <Text style={[styles.label, { color: theme.textPrimary }]}>
+          Username / Email
+        </Text>
         <TextInput
           style={[
             styles.input,
@@ -74,7 +75,9 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.inputContainer}>
-        <Text style={[styles.label, { color: theme.textPrimary }]}>Password</Text>
+        <Text style={[styles.label, { color: theme.textPrimary }]}>
+          Password
+        </Text>
         <TextInput
           style={[
             styles.input,
