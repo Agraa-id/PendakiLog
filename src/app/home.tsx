@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { styles } from "../constants/styles";
-import { ThemeContext } from "./_layout"; // Import Context
+import { ThemeContext } from "./_layout";
 
 type MountainStatus = "Buka" | "Waspada" | "Tutup";
 type FilterStatus = "Semua" | MountainStatus;
@@ -23,6 +23,7 @@ interface MountainLog {
   elevation: number;
   status: MountainStatus;
   description: string;
+  price: number;
 }
 
 const CATEGORIES: FilterStatus[] = ["Semua", "Buka", "Waspada", "Tutup"];
@@ -41,6 +42,7 @@ const INITIAL_MOUNTAIN_DATA: MountainLog[] = [
     elevation: 3339,
     status: "Buka",
     description: "Memiliki jalur ikonik via Purwosari dan Sumberawan.",
+    price: 35000,
   },
   {
     id: "2",
@@ -49,6 +51,7 @@ const INITIAL_MOUNTAIN_DATA: MountainLog[] = [
     elevation: 3676,
     status: "Waspada",
     description: "Atap pulau Jawa. Aktivitas vulkanik sedang dipantau.",
+    price: 50000,
   },
   {
     id: "3",
@@ -57,6 +60,7 @@ const INITIAL_MOUNTAIN_DATA: MountainLog[] = [
     elevation: 3156,
     status: "Buka",
     description: "Terkenal dengan penambangan belerang tradisional.",
+    price: 35000,
   },
   {
     id: "4",
@@ -65,25 +69,28 @@ const INITIAL_MOUNTAIN_DATA: MountainLog[] = [
     elevation: 2329,
     status: "Buka",
     description: "Kawasan lautan pasir dan kaldera yang indah.",
+    price: 40000,
   },
 ];
 
 export default function HomeScreen() {
-  // Ambil state darkMode dari ThemeContext
   const { darkMode } = useContext(ThemeContext);
 
   const [mountains, setMountains] = useState<MountainLog[]>(INITIAL_MOUNTAIN_DATA);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<FilterStatus>("Semua");
 
-  // State Modal Form
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  // State Modal Form Tambah
+  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [newName, setNewName] = useState("");
   const [newLocation, setNewLocation] = useState("");
   const [newElevation, setNewElevation] = useState("");
+  const [newPrice, setNewPrice] = useState("");
   const [newStatus, setNewStatus] = useState<MountainStatus>("Buka");
 
-  // Palette warna dinamis berdasarkan Dark Mode
+  // State Modal Hapus Data
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+
   const theme = {
     bg: darkMode ? "#0f172a" : "#f8fafc",
     cardBg: darkMode ? "#1e293b" : "#ffffff",
@@ -103,6 +110,7 @@ export default function HomeScreen() {
     return matchesSearch && matchesCategory;
   });
 
+  // Fungsi Tambah Gunung
   const handleAddMountain = () => {
     if (!newName.trim() || !newLocation.trim() || !newElevation.trim()) {
       Alert.alert("Peringatan", "Semua kolom wajib diisi!");
@@ -114,16 +122,38 @@ export default function HomeScreen() {
       name: newName,
       location: newLocation,
       elevation: Number(newElevation) || 0,
+      price: Number(newPrice) || 35000,
       status: newStatus,
       description: "Catatan baru berhasil ditambahkan oleh pendaki.",
     };
 
     setMountains([newItem, ...mountains]);
-    setIsModalVisible(false);
+    setIsAddModalVisible(false);
     setNewName("");
     setNewLocation("");
     setNewElevation("");
+    setNewPrice("");
     Alert.alert("Berhasil", "Data gunung baru telah ditambahkan!");
+  };
+
+  // Fungsi Hapus Gunung Spesifik dari Modal
+  const handleDeleteMountain = (id: string, name: string) => {
+    Alert.alert(
+      "Konfirmasi Hapus",
+      `Apakah Anda yakin ingin menghapus data ${name}?`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: () => {
+            setMountains((prev) => prev.filter((item) => item.id !== id));
+            setIsDeleteModalVisible(false);
+            Alert.alert("Berhasil", `Data ${name} telah dihapus.`);
+          },
+        },
+      ]
+    );
   };
 
   const renderMountainCard = ({ item }: { item: MountainLog }) => {
@@ -148,8 +178,13 @@ export default function HomeScreen() {
             color="#16a34a"
           />
         </View>
+
         <Text style={[styles.cardDetail, { color: theme.textSecondary }]}>Lokasi: {item.location}</Text>
         <Text style={[styles.cardDetail, { color: theme.textSecondary }]}>Ketinggian: {item.elevation} mdpl</Text>
+        <Text style={[styles.cardDetail, { color: "#16a34a", fontWeight: "bold", marginTop: 4 }]}>
+          Tiket: Rp {item.price ? item.price.toLocaleString("id-ID") : "35.000"}
+        </Text>
+
         <View style={[styles.badge, { backgroundColor: badge.bg }]}>
           <Text style={[styles.badgeText, { color: badge.text }]}>
             Jalur {item.status}
@@ -179,15 +214,27 @@ export default function HomeScreen() {
             Pendaki
           </Text>
         </View>
-        <View style={{ flexDirection: "row", gap: 8 }}>
+
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          {/* Tombol Hapus (Merah) di Samping Tombol Plus */}
+          <Pressable
+            style={{ backgroundColor: "#ef4444", padding: 8, borderRadius: 8 }}
+            onPress={() => setIsDeleteModalVisible(true)}
+          >
+            <Ionicons name="trash-outline" size={20} color="white" />
+          </Pressable>
+
+          {/* Tombol Plus (Hijau) */}
           <Pressable
             style={{ backgroundColor: "#16a34a", padding: 8, borderRadius: 8 }}
-            onPress={() => setIsModalVisible(true)}
+            onPress={() => setIsAddModalVisible(true)}
           >
             <Ionicons name="add" size={20} color="white" />
           </Pressable>
+
+          {/* Tombol Logout */}
           <Pressable
-            style={{ backgroundColor: "#ef4444", padding: 8, borderRadius: 8 }}
+            style={{ backgroundColor: "#64748b", padding: 8, borderRadius: 8 }}
             onPress={() => router.replace("/")}
           >
             <Ionicons name="log-out-outline" size={20} color="white" />
@@ -247,7 +294,7 @@ export default function HomeScreen() {
       />
 
       {/* Modal Form Tambah Gunung Baru */}
-      <Modal visible={isModalVisible} animationType="slide" transparent>
+      <Modal visible={isAddModalVisible} animationType="slide" transparent>
         <View
           style={{
             flex: 1,
@@ -291,12 +338,20 @@ export default function HomeScreen() {
               onChangeText={setNewLocation}
             />
             <TextInput
-              style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.textPrimary, marginBottom: 16 }]}
+              style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.textPrimary, marginBottom: 10 }]}
               placeholder="Ketinggian (mdpl)..."
               placeholderTextColor={theme.textSecondary}
               keyboardType="numeric"
               value={newElevation}
               onChangeText={setNewElevation}
+            />
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.textPrimary, marginBottom: 16 }]}
+              placeholder="Harga Tiket (Rp)..."
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="numeric"
+              value={newPrice}
+              onChangeText={setNewPrice}
             />
 
             <View style={{ flexDirection: "row", gap: 10 }}>
@@ -314,11 +369,82 @@ export default function HomeScreen() {
                   styles.primaryBtn,
                   { flex: 1, backgroundColor: "#64748b" },
                 ]}
-                onPress={() => setIsModalVisible(false)}
+                onPress={() => setIsAddModalVisible(false)}
               >
                 <Text style={styles.btnText}>Batal</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Pilihan Hapus Gunung */}
+      <Modal visible={isDeleteModalVisible} animationType="slide" transparent>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.cardBg,
+              borderRadius: 16,
+              padding: 20,
+              borderWidth: 1,
+              borderColor: theme.border,
+              maxHeight: "70%",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                color: theme.textPrimary,
+                marginBottom: 12,
+              }}
+            >
+              Pilih Gunung yang Ingin Dihapus
+            </Text>
+
+            <FlatList
+              data={mountains}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.border,
+                  }}
+                >
+                  <Text style={{ color: theme.textPrimary, fontWeight: "600", fontSize: 15 }}>
+                    {item.name}
+                  </Text>
+                  <Pressable
+                    style={{ backgroundColor: "#ef4444", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                    onPress={() => handleDeleteMountain(item.id, item.name)}
+                  >
+                    <Text style={{ color: "white", fontWeight: "bold", fontSize: 12 }}>Hapus</Text>
+                  </Pressable>
+                </View>
+              )}
+            />
+
+            <Pressable
+              style={[
+                styles.primaryBtn,
+                { backgroundColor: "#64748b", marginTop: 16 },
+              ]}
+              onPress={() => setIsDeleteModalVisible(false)}
+            >
+              <Text style={styles.btnText}>Tutup</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

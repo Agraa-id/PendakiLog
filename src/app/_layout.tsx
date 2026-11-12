@@ -40,6 +40,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ title: "PendakiLog - Autentikasi" }} />
         <Stack.Screen name="home" options={{ title: "PendakiLog - Beranda" }} />
         <Stack.Screen name="detail/[id]" options={{ title: "Detail Gunung" }} />
+        <Stack.Screen name="checkout" options={{ title: "Checkout Tiket" }} />
       </Stack>
     </ThemeContext.Provider>
   );
