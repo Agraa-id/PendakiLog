@@ -12,14 +12,14 @@ Expo React Native app for managing personal mountain logs with Supabase Auth and
 
 2. Create a Supabase project and copy `.env.example` to `.env.local`. Set
    `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` using the
-   project URL and public anon key from the Supabase dashboard. Never use a
-   `service_role` key in the app.
+   project URL and publishable/anon key from the Supabase dashboard. Never use
+   a `service_role` key in the app.
 
 3. Run the SQL in
    [`supabase/migrations/20260501000000_create_mountain_logs.sql`](./supabase/migrations/20260501000000_create_mountain_logs.sql)
-   once in the Supabase SQL Editor. It creates the `mountain_logs` table and
-   enables row-level security so each signed-in user can access only their own
-   records.
+   in the Supabase SQL Editor. It creates the `mountain_logs` table and enables
+   row-level security so each signed-in user can access only their own records.
+   It is safe to rerun: existing policies are replaced without deleting data.
 
 4. Start Expo:
 
