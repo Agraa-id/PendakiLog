@@ -49,7 +49,7 @@ export default function DetailScreen() {
       setMountain(response.data);
       loadWeather(response.data);
     } catch (err) {
-      setError(String(err)); // pesan dari reject()
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }

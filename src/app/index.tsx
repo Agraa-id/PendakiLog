@@ -1,16 +1,31 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useContext, useState } from "react";
-import { Alert, Pressable, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { styles } from "../constants/styles";
+import { useAuth } from "../contexts/AuthContext";
+import {
+  isSupabaseConfigured,
+  SUPABASE_CONFIG_ERROR,
+} from "../services/supabase";
 import { ThemeContext } from "./_layout";
 
 export default function LoginScreen() {
   const { darkMode } = useContext(ThemeContext);
+  const { signIn, signUp } = useAuth();
 
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
-  const [username, setUsername] = useState<string>("");
+  const [callsign, setCallsign] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
 
   const theme = {
     bg: darkMode ? "#0f172a" : "#f8fafc",
@@ -18,28 +33,49 @@ export default function LoginScreen() {
     textSecondary: darkMode ? "#94a3b8" : "#64748b",
     border: darkMode ? "#334155" : "#cbd5e1",
     inputBg: darkMode ? "#1e293b" : "#ffffff",
-    guestBtnBg: darkMode ? "#334155" : "#1e293b",
   };
 
-  const handleLogin = () => {
-    if (!username.trim()) {
-      Alert.alert("Peringatan", "Masukkan username terlebih dahulu!");
+  const handleAuthentication = async () => {
+    const trimmedEmail = email.trim();
+    const trimmedCallsign = callsign.trim();
+    if (!trimmedEmail || !password || (isRegistering && !trimmedCallsign)) {
+      Alert.alert(
+        "Peringatan",
+        isRegistering
+          ? "Lengkapi nama pendaki, email, dan password."
+          : "Masukkan email dan password.",
+      );
       return;
     }
-    router.replace("/home");
-  };
 
-  const handleRegister = () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert("Peringatan", "Lengkapi username dan password!");
-      return;
+    try {
+      setSubmitting(true);
+      if (isRegistering) {
+        const signedIn = await signUp(
+          trimmedEmail,
+          password,
+          trimmedCallsign,
+        );
+        if (!signedIn) {
+          Alert.alert(
+            "Periksa email",
+            "Akun berhasil dibuat. Konfirmasi email Anda sebelum masuk.",
+          );
+          setIsRegistering(false);
+          return;
+        }
+      } else {
+        await signIn(trimmedEmail, password);
+      }
+      router.replace("/home");
+    } catch (error) {
+      Alert.alert(
+        isRegistering ? "Pendaftaran gagal" : "Login gagal",
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setSubmitting(false);
     }
-    Alert.alert("Berhasil", "Akun PendakiLog berhasil dibuat! Silakan login.");
-    setIsRegistering(false);
-  };
-
-  const handleGuestLogin = () => {
-    router.replace("/home");
   };
 
   return (
@@ -52,11 +88,46 @@ export default function LoginScreen() {
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           Catatan & Info Jalur Pendakian Gunung
         </Text>
+        {!isSupabaseConfigured ? (
+          <Text
+            style={{
+              color: "#dc2626",
+              textAlign: "center",
+              marginTop: 12,
+              fontSize: 12,
+            }}
+          >
+            {SUPABASE_CONFIG_ERROR}
+          </Text>
+        ) : null}
       </View>
+
+      {isRegistering ? (
+        <View style={styles.inputContainer}>
+          <Text style={[styles.label, { color: theme.textPrimary }]}>
+            Nama Pendaki
+          </Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: theme.inputBg,
+                borderColor: theme.border,
+                color: theme.textPrimary,
+              },
+            ]}
+            placeholder="Masukkan nama panggilan..."
+            placeholderTextColor={theme.textSecondary}
+            autoCapitalize="words"
+            value={callsign}
+            onChangeText={setCallsign}
+          />
+        </View>
+      ) : null}
 
       <View style={styles.inputContainer}>
         <Text style={[styles.label, { color: theme.textPrimary }]}>
-          Username / Email
+          Email
         </Text>
         <TextInput
           style={[
@@ -67,10 +138,13 @@ export default function LoginScreen() {
               color: theme.textPrimary,
             },
           ]}
-          placeholder="Masukkan username..."
+          placeholder="nama@email.com"
           placeholderTextColor={theme.textSecondary}
-          value={username}
-          onChangeText={setUsername}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          value={email}
+          onChangeText={setEmail}
         />
       </View>
 
@@ -90,6 +164,8 @@ export default function LoginScreen() {
           placeholder="Masukkan password..."
           placeholderTextColor={theme.textSecondary}
           secureTextEntry
+          autoCapitalize="none"
+          autoComplete={isRegistering ? "new-password" : "current-password"}
           value={password}
           onChangeText={setPassword}
         />
@@ -97,17 +173,17 @@ export default function LoginScreen() {
 
       {!isRegistering ? (
         <>
-          <Pressable style={styles.primaryBtn} onPress={handleLogin}>
-            <Ionicons name="log-in-outline" size={20} color="white" />
-            <Text style={styles.btnText}>Masuk ke PendakiLog</Text>
-          </Pressable>
-
           <Pressable
-            style={[styles.guestBtn, { backgroundColor: theme.guestBtnBg }]}
-            onPress={handleGuestLogin}
+            style={[styles.primaryBtn, submitting && { opacity: 0.7 }]}
+            onPress={handleAuthentication}
+            disabled={submitting}
           >
-            <Ionicons name="person-outline" size={20} color="white" />
-            <Text style={styles.btnText}>Login Sebagai Tamu</Text>
+            {submitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Ionicons name="log-in-outline" size={20} color="white" />
+            )}
+            <Text style={styles.btnText}>Masuk ke PendakiLog</Text>
           </Pressable>
 
           <Pressable onPress={() => setIsRegistering(true)}>
@@ -116,8 +192,16 @@ export default function LoginScreen() {
         </>
       ) : (
         <>
-          <Pressable style={styles.secondaryBtn} onPress={handleRegister}>
-            <Ionicons name="person-add-outline" size={20} color="white" />
+          <Pressable
+            style={[styles.secondaryBtn, submitting && { opacity: 0.7 }]}
+            onPress={handleAuthentication}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Ionicons name="person-add-outline" size={20} color="white" />
+            )}
             <Text style={styles.btnText}>Daftar Akun Baru</Text>
           </Pressable>
 

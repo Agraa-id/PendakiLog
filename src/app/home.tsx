@@ -6,6 +6,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   Text,
   TextInput,
   View,
@@ -17,7 +18,9 @@ import {
   addMountain,
   deleteMountain,
   getMountains,
+  updateMountain,
 } from "../services/mountainService";
+import { useAuth } from "../contexts/AuthContext";
 import type {
   FilterStatus,
   MountainLog,
@@ -36,6 +39,7 @@ const BADGE_COLORS: Record<MountainStatus, { bg: string; text: string }> = {
 
 export default function HomeScreen() {
   const { darkMode } = useContext(ThemeContext);
+  const { session, signOut } = useAuth();
 
   const [mountains, setMountains] = useState<MountainLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -51,6 +55,10 @@ export default function HomeScreen() {
   const [newElevation, setNewElevation] = useState("");
   const [newPrice, setNewPrice] = useState("");
   const [newStatus, setNewStatus] = useState<MountainStatus>("Buka");
+  const [editingMountain, setEditingMountain] = useState<MountainLog | null>(
+    null,
+  );
+  const [saving, setSaving] = useState(false);
 
   // State Modal Hapus Data
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
@@ -65,7 +73,7 @@ export default function HomeScreen() {
       }
       setMountains(response.data);
     } catch (error) {
-      setLoadError(String(error));
+      setLoadError(error instanceof Error ? error.message : String(error));
     } finally {
       setLoading(false);
     }
@@ -94,7 +102,26 @@ export default function HomeScreen() {
     return matchesSearch && matchesCategory;
   });
 
-  // Fungsi Tambah Gunung
+  const openAddModal = () => {
+    setEditingMountain(null);
+    setNewName("");
+    setNewLocation("");
+    setNewElevation("");
+    setNewPrice("");
+    setNewStatus("Buka");
+    setIsAddModalVisible(true);
+  };
+
+  const openEditModal = (mountain: MountainLog) => {
+    setEditingMountain(mountain);
+    setNewName(mountain.name);
+    setNewLocation(mountain.location);
+    setNewElevation(String(mountain.elevation));
+    setNewPrice(String(mountain.price));
+    setNewStatus(mountain.status);
+    setIsAddModalVisible(true);
+  };
+
   const handleAddMountain = async () => {
     if (!newName.trim() || !newLocation.trim() || !newElevation.trim()) {
       Alert.alert("Peringatan", "Semua kolom wajib diisi!");
@@ -120,20 +147,65 @@ export default function HomeScreen() {
       status: newStatus,
     };
 
+    const temporaryId = `pending-${Date.now()}`;
+    const previousMountain = editingMountain;
+    if (previousMountain) {
+      setMountains((previous) =>
+        previous.map((item) =>
+          item.id === previousMountain.id ? { ...item, ...input } : item,
+        ),
+      );
+    } else {
+      setMountains((previous) => [
+        {
+          id: temporaryId,
+          ...input,
+          description: "Catatan baru berhasil ditambahkan oleh pendaki.",
+          difficulty: "Belum diketahui",
+          estimatedTime: "Belum diketahui",
+        },
+        ...previous,
+      ]);
+    }
+
     try {
-      const response = await addMountain(input);
+      setSaving(true);
+      const response = previousMountain
+        ? await updateMountain(previousMountain.id, input)
+        : await addMountain(input);
       if (!response.success) {
         throw new Error(response.message);
       }
-      setMountains((prev) => [response.data, ...prev]);
+      setMountains((previous) =>
+        previousMountain
+          ? previous.map((item) =>
+              item.id === previousMountain.id ? response.data : item,
+            )
+          : previous.map((item) =>
+              item.id === temporaryId ? response.data : item,
+            ),
+      );
       setIsAddModalVisible(false);
+      setEditingMountain(null);
       setNewName("");
       setNewLocation("");
       setNewElevation("");
       setNewPrice("");
       Alert.alert("Berhasil", response.message);
     } catch (error) {
-      Alert.alert("Gagal menambahkan data", String(error));
+      setMountains((previous) =>
+        previousMountain
+          ? previous.map((item) =>
+              item.id === previousMountain.id ? previousMountain : item,
+            )
+          : previous.filter((item) => item.id !== temporaryId),
+      );
+      Alert.alert(
+        previousMountain ? "Gagal memperbarui data" : "Gagal menambahkan data",
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -148,6 +220,13 @@ export default function HomeScreen() {
           text: "Hapus",
           style: "destructive",
           onPress: async () => {
+            const previousIndex = mountains.findIndex(
+              (item) => item.id === id,
+            );
+            const previousMountain = mountains[previousIndex];
+            setMountains((previous) =>
+              previous.filter((item) => item.id !== id),
+            );
             try {
               const response = await deleteMountain(id);
               if (!response.success) {
@@ -157,7 +236,21 @@ export default function HomeScreen() {
               setIsDeleteModalVisible(false);
               Alert.alert("Berhasil", `Data ${name} telah dihapus.`);
             } catch (error) {
-              Alert.alert("Gagal menghapus data", String(error));
+              if (previousMountain) {
+                setMountains((previous) => {
+                  const restored = [...previous];
+                  restored.splice(
+                    Math.min(previousIndex, restored.length),
+                    0,
+                    previousMountain,
+                  );
+                  return restored;
+                });
+              }
+              Alert.alert(
+                "Gagal menghapus data",
+                error instanceof Error ? error.message : String(error),
+              );
             }
           },
         },
@@ -167,53 +260,70 @@ export default function HomeScreen() {
 
   const renderMountainCard = ({ item }: { item: MountainLog }) => {
     const badge = BADGE_COLORS[item.status] || BADGE_COLORS["Buka"];
+    const isPending = item.id.startsWith("pending-");
 
     return (
-      <Pressable
+      <View
         style={[
           styles.card,
           { backgroundColor: theme.cardBg, borderColor: theme.border },
         ]}
-        onPress={() => router.push(`/detail/${item.id}`)}
       >
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
+        <Pressable
+          onPress={() => router.push(`/detail/${item.id}`)}
+          disabled={isPending}
+          accessibilityRole="button"
+          accessibilityLabel={`Lihat detail ${item.name}`}
         >
-          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
-            {item.name}
-          </Text>
-          <MaterialCommunityIcons
-            name="image-filter-hdr"
-            size={24}
-            color="#16a34a"
-          />
-        </View>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
+              {item.name}
+            </Text>
+            <MaterialCommunityIcons
+              name="image-filter-hdr"
+              size={24}
+              color="#16a34a"
+            />
+          </View>
 
-        <Text style={[styles.cardDetail, { color: theme.textSecondary }]}>
-          Lokasi: {item.location}
-        </Text>
-        <Text style={[styles.cardDetail, { color: theme.textSecondary }]}>
-          Ketinggian: {item.elevation} mdpl
-        </Text>
-        <Text
-          style={[
-            styles.cardDetail,
-            { color: "#16a34a", fontWeight: "bold", marginTop: 4 },
-          ]}
+          <Text style={[styles.cardDetail, { color: theme.textSecondary }]}>
+            Lokasi: {item.location}
+          </Text>
+          <Text style={[styles.cardDetail, { color: theme.textSecondary }]}>
+            Ketinggian: {item.elevation} mdpl
+          </Text>
+          <Text
+            style={[
+              styles.cardDetail,
+              { color: "#16a34a", fontWeight: "bold", marginTop: 4 },
+            ]}
+          >
+            Tiket: Rp{" "}
+            {item.price ? item.price.toLocaleString("id-ID") : "35.000"}
+          </Text>
+
+          <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+            <Text style={[styles.badgeText, { color: badge.text }]}>
+              Jalur {item.status}
+            </Text>
+          </View>
+        </Pressable>
+        <Pressable
+          onPress={() => openEditModal(item)}
+          disabled={isPending}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${item.name}`}
+          style={{ alignSelf: "flex-end", padding: 8 }}
         >
-          Tiket: Rp {item.price ? item.price.toLocaleString("id-ID") : "35.000"}
-        </Text>
-
-        <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-          <Text style={[styles.badgeText, { color: badge.text }]}>
-            Jalur {item.status}
-          </Text>
-        </View>
-      </Pressable>
+          <Ionicons name="create-outline" size={20} color="#16a34a" />
+        </Pressable>
+      </View>
     );
   };
 
@@ -285,7 +395,7 @@ export default function HomeScreen() {
               color: theme.textPrimary,
             }}
           >
-            Pendaki
+            {session?.user.user_metadata?.callsign || session?.user.email || "Pendaki"}
           </Text>
         </View>
 
@@ -301,7 +411,7 @@ export default function HomeScreen() {
           {/* Tombol Plus (Hijau) */}
           <Pressable
             style={{ backgroundColor: "#16a34a", padding: 8, borderRadius: 8 }}
-            onPress={() => setIsAddModalVisible(true)}
+            onPress={openAddModal}
           >
             <Ionicons name="add" size={20} color="white" />
           </Pressable>
@@ -309,7 +419,17 @@ export default function HomeScreen() {
           {/* Tombol Logout */}
           <Pressable
             style={{ backgroundColor: "#64748b", padding: 8, borderRadius: 8 }}
-            onPress={() => router.replace("/")}
+            onPress={async () => {
+              try {
+                await signOut();
+                router.replace("/");
+              } catch (error) {
+                Alert.alert(
+                  "Gagal keluar",
+                  error instanceof Error ? error.message : String(error),
+                );
+              }
+            }}
           >
             <Ionicons name="log-out-outline" size={20} color="white" />
           </Pressable>
@@ -375,6 +495,9 @@ export default function HomeScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderMountainCard}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={loadAsyncData} />
+        }
         ListEmptyComponent={
           <Text
             style={{
@@ -415,7 +538,7 @@ export default function HomeScreen() {
                 marginBottom: 16,
               }}
             >
-              Tambah Gunung Baru
+              {editingMountain ? "Edit Data Gunung" : "Tambah Gunung Baru"}
             </Text>
 
             <TextInput
@@ -481,6 +604,40 @@ export default function HomeScreen() {
               onChangeText={setNewPrice}
             />
 
+            <Text style={[styles.label, { color: theme.textPrimary }]}>
+              Status Jalur
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 8,
+                marginBottom: 8,
+              }}
+            >
+              {(["Buka", "Waspada", "Tutup"] as const).map((status) => (
+                <Pressable
+                  key={status}
+                  onPress={() => setNewStatus(status)}
+                  style={{
+                    backgroundColor:
+                      newStatus === status ? "#16a34a" : theme.border,
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    borderRadius: 16,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: newStatus === status ? "#fff" : theme.textPrimary,
+                      fontSize: 12,
+                    }}
+                  >
+                    {status}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
             <View style={{ flexDirection: "row", gap: 10 }}>
               <Pressable
                 style={[
@@ -488,8 +645,15 @@ export default function HomeScreen() {
                   { flex: 1, backgroundColor: "#16a34a" },
                 ]}
                 onPress={handleAddMountain}
+                disabled={saving}
               >
-                <Text style={styles.btnText}>Simpan</Text>
+                <Text style={styles.btnText}>
+                  {saving
+                    ? "Menyimpan..."
+                    : editingMountain
+                      ? "Simpan Perubahan"
+                      : "Simpan"}
+                </Text>
               </Pressable>
               <Pressable
                 style={[
@@ -497,6 +661,7 @@ export default function HomeScreen() {
                   { flex: 1, backgroundColor: "#64748b" },
                 ]}
                 onPress={() => setIsAddModalVisible(false)}
+                disabled={saving}
               >
                 <Text style={styles.btnText}>Batal</Text>
               </Pressable>
